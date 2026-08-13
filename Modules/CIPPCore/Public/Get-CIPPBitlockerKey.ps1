@@ -22,6 +22,9 @@
     Array of PSCustomObject with properties:
     - resultText: Formatted string containing the key ID and key value
     - copyField: The raw key value
+    - keyId: The BitLocker recovery key ID
+    - createdDateTime: The recovery key creation date
+    - volumeType: The BitLocker volume type
     - state: Status of the operation ('success')
 
     Or a string message if no keys are found.
@@ -41,9 +44,12 @@ function Get-CIPPBitLockerKey {
             ForEach-Object {
                 $BitLockerKeyObject = (New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys/$($_.id)?`$select=key" -tenantid $TenantFilter)
                 [PSCustomObject]@{
-                    resultText = "Id: $($_.id) Key: $($BitLockerKeyObject.key)"
-                    copyField  = $BitLockerKeyObject.key
-                    state      = 'success'
+                    resultText      = "Id: $($_.id) Key: $($BitLockerKeyObject.key)"
+                    copyField       = $BitLockerKeyObject.key
+                    keyId           = $_.id
+                    createdDateTime = $_.createdDateTime
+                    volumeType      = $_.volumeType
+                    state           = 'success'
                 }
             }
 
