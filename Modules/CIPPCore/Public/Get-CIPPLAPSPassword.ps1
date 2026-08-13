@@ -13,9 +13,11 @@ function Get-CIPPLapsPassword {
             $PlainText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_.passwordBase64))
             $date = $_.BackupDateTime
             [PSCustomObject]@{
-                resultText = "LAPS password retrieved for $($_.accountName), generated at $($date). Copy the password by clicking the copy button"
-                copyField  = $PlainText
-                state      = 'success'
+                resultText     = "LAPS password retrieved for $($_.accountName), generated at $($date). Copy the password by clicking the copy button"
+                copyField      = $PlainText
+                accountName    = $_.accountName
+                backupDateTime = $_.BackupDateTime
+                state          = 'success'
             }
         }
         if ($GraphRequest) { return $GraphRequest } else { return "No LAPS password found for $device" }
