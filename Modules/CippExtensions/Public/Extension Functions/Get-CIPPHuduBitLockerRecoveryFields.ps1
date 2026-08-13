@@ -10,7 +10,7 @@ function Get-CIPPHuduBitLockerRecoveryFields {
 
     $Fields = @{}
     if (-not $KeyId -or $KeyId.Count -eq 0) {
-        return $Fields
+        return [PSCustomObject]@{ Fields = $Fields; Success = $true }
     }
 
     try {
@@ -20,12 +20,16 @@ function Get-CIPPHuduBitLockerRecoveryFields {
                 Sort-Object keyId
         )
 
-        if ($BitLockerKeys.Count -gt 0) {
+        $Success = $BitLockerKeys.Count -eq $KeyId.Count
+        if ($Success) {
             $Fields.bitlocker_recovery_keys = ($BitLockerKeys | ForEach-Object { "$($_.keyId): $($_.copyField)" }) -join "`n"
+        } else {
+            Write-Warning "BitLocker recovery key retrieval was incomplete for $($Device.deviceName)."
         }
+
+        return [PSCustomObject]@{ Fields = $Fields; Success = $Success }
     } catch {
         Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName): $_"
+        return [PSCustomObject]@{ Fields = $Fields; Success = $false }
     }
-
-    return $Fields
 }
