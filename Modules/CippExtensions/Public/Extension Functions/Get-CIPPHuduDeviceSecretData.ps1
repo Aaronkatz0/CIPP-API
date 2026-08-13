@@ -13,12 +13,14 @@ function Get-CIPPHuduDeviceSecretData {
     $Fields = @{}
     $HashData = [ordered]@{}
     $BitLockerKeyIds = @()
+    $Success = $true
 
     if ($Device.operatingSystem -ne 'Windows' -or [string]::IsNullOrWhiteSpace([string]$Device.azureADDeviceId)) {
         return [PSCustomObject]@{
             Fields          = $Fields
             HashData        = $HashData
             BitLockerKeyIds = $BitLockerKeyIds
+            Success         = $true
         }
     }
 
@@ -29,13 +31,20 @@ function Get-CIPPHuduDeviceSecretData {
                 $Fields.laps_account = $LAPSResult.accountName
                 $Fields.laps_password = $LAPSResult.copyField
                 $Fields.laps_backup_date = [string]$LAPSResult.backupDateTime
+                $HashData.lapsAccount = $LAPSResult.accountName
                 $HashData.lapsBackupDateTime = [string]$LAPSResult.backupDateTime
-            } else {
+            } elseif ([string]$LAPSResult -like 'No LAPS password found*') {
+                $Fields.laps_account = ''
+                $Fields.laps_password = ''
+                $Fields.laps_backup_date = ''
+                $HashData.lapsAccount = $null
                 $HashData.lapsBackupDateTime = $null
+            } else {
+                $Success = $false
             }
         } catch {
             Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $_"
-            $HashData.lapsBackupDateTime = $null
+            $Success = $false
         }
     }
 
@@ -47,6 +56,9 @@ function Get-CIPPHuduDeviceSecretData {
         )
         $BitLockerKeyIds = @($DeviceBitLockerKeys.id)
         $Fields.bitlocker_key_ids = $BitLockerKeyIds -join "`n"
+        if ($BitLockerKeyIds.Count -eq 0) {
+            $Fields.bitlocker_recovery_keys = ''
+        }
         $HashData.bitLockerKeyIds = $BitLockerKeyIds
     }
 
@@ -54,5 +66,6 @@ function Get-CIPPHuduDeviceSecretData {
         Fields          = $Fields
         HashData        = $HashData
         BitLockerKeyIds = $BitLockerKeyIds
+        Success         = $Success
     }
 }
