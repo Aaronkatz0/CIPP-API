@@ -104,18 +104,30 @@ function Invoke-HuduExtensionSync {
 
         try {
             if (![string]::IsNullOrEmpty($DeviceLayoutId)) {
-                $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId
+                $DesktopsLayout = Get-HuduAssetLayouts -Id $DeviceLayoutId
+                $DeviceLayoutFieldsAdded = $false
+                $RequiredDeviceLayoutFields = [System.Collections.Generic.List[object]]@(
+                    @{ Label = 'Microsoft 365'; FieldType = 'RichText' }
+                )
                 if ($Configuration.IncludeLAPS) {
-                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Account' -FieldType 'Text'
-                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Password' -FieldType 'Password'
-                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Backup Date' -FieldType 'Text'
+                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Account'; FieldType = 'Text' })
+                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Password'; FieldType = 'Password' })
+                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Backup Date'; FieldType = 'Text' })
                 }
                 if ($Configuration.IncludeBitLocker) {
-                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'BitLocker Key IDs' -FieldType 'Text'
-                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'BitLocker Recovery Keys' -FieldType 'Password'
+                    $RequiredDeviceLayoutFields.Add(@{ Label = 'BitLocker Key IDs'; FieldType = 'Text' })
+                    $RequiredDeviceLayoutFields.Add(@{ Label = 'BitLocker Recovery Keys'; FieldType = 'Password' })
+                }
+                foreach ($RequiredField in $RequiredDeviceLayoutFields) {
+                    if ($DesktopsLayout.fields.label -notcontains $RequiredField.Label) {
+                        $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label $RequiredField.Label -FieldType $RequiredField.FieldType
+                        $DeviceLayoutFieldsAdded = $true
+                    }
+                }
+                if ($DeviceLayoutFieldsAdded) {
+                    $DesktopsLayout = Get-HuduAssetLayouts -Id $DeviceLayoutId
                 }
                 $CreateDevices = $Configuration.CreateMissingDevices
-                $DesktopsLayout = Get-HuduAssetLayouts -Id $DeviceLayoutId
                 if ($DesktopsLayout.id) {
                     $HuduDesktopDevices = Get-HuduAssets -CompanyId $company_id -AssetLayoutId $DesktopsLayout.id
                     $HuduDevices = [System.Collections.Generic.List[object]]::new([object[]]@($HuduDesktopDevices))
@@ -347,6 +359,23 @@ function Invoke-HuduExtensionSync {
 
         $devices = $ExtensionCache.Devices
         $CompanyResult.Devices = ($Devices | Measure-Object).count
+
+        $LAPSMetadataAvailable = $true
+        $LAPSMetadataByDeviceId = @{}
+        if ($Configuration.IncludeLAPS) {
+            try {
+                $LAPSMetadata = @(New-GraphGetRequest -NoAuthCheck $true -uri 'https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime,refreshDateTime' -tenantid $TenantFilter)
+                foreach ($LAPSMetadataItem in $LAPSMetadata) {
+                    if ($LAPSMetadataItem -is [string] -or [string]::IsNullOrWhiteSpace([string]$LAPSMetadataItem.id) -or [string]::IsNullOrWhiteSpace([string]$LAPSMetadataItem.lastBackupDateTime)) {
+                        throw 'The LAPS metadata response contained an incomplete record.'
+                    }
+                    $LAPSMetadataByDeviceId[[string]$LAPSMetadataItem.id] = $LAPSMetadataItem
+                }
+            } catch {
+                $LAPSMetadataAvailable = $false
+                Write-Warning "Unable to retrieve LAPS metadata for $($Tenant.defaultDomainName): $_"
+            }
+        }
 
         $BitLockerMetadataAvailable = $true
         $BitLockerKeyMetadata = @()
@@ -1087,6 +1116,11 @@ function Invoke-HuduExtensionSync {
                                 Where-Object { $_.label -eq 'LAPS Backup Date' -or $_.slug -eq 'laps_backup_date' } |
                                 Select-Object -First 1 -ExpandProperty value
                         )
+                        $ExistingLAPSCredentialPresent = -not [string]::IsNullOrWhiteSpace([string](
+                                $SingleHuduDevice.fields |
+                                    Where-Object { $_.label -eq 'LAPS Password' -or $_.slug -eq 'laps_password' } |
+                                    Select-Object -First 1 -ExpandProperty value
+                            ))
                         $ExistingBitLockerKeyIds = @(
                             [string](
                                 $SingleHuduDevice.fields |
@@ -1100,19 +1134,20 @@ function Invoke-HuduExtensionSync {
 
                         if ($Configuration.IncludeLAPS) {
                             try {
-                                $LAPSMetadataResult = @(New-GraphGetRequest -NoAuthCheck $true -uri "https://graph.microsoft.com/beta/directory/deviceLocalCredentials?`$filter=id eq '$($Device.azureADDeviceId)'&`$select=id,deviceName,lastBackupDateTime,refreshDateTime" -tenantid $TenantFilter)
-                                if ($LAPSMetadataResult.Count -eq 0) {
+                                if (-not $LAPSMetadataAvailable) {
+                                    throw 'LAPS metadata is unavailable.'
+                                }
+
+                                $LAPSMetadata = $LAPSMetadataByDeviceId[[string]$Device.azureADDeviceId]
+                                if ($null -eq $LAPSMetadata) {
                                     $DeviceAssetFields.laps_account = ''
                                     $DeviceAssetFields.laps_password = ''
                                     $DeviceAssetFields.laps_backup_date = ''
                                     $DeviceHashMaterial += "`nLAPS Account:`nLAPS Backup Date:"
-                                } elseif ($LAPSMetadataResult.Count -ne 1 -or $LAPSMetadataResult[0] -is [string] -or [string]::IsNullOrWhiteSpace([string]$LAPSMetadataResult[0].lastBackupDateTime)) {
-                                    throw 'The LAPS metadata response was incomplete.'
                                 } else {
-                                    $LAPSMetadata = $LAPSMetadataResult[0]
                                     $LAPSBackupDate = [string]$LAPSMetadata.lastBackupDateTime
-                                    $LAPSAccount = if (-not [string]::IsNullOrWhiteSpace([string]$LAPSMetadata.accountName)) { [string]$LAPSMetadata.accountName } else { $ExistingLAPSAccount }
-                                    $RetrieveLAPSPassword = $IsNewHuduDevice -or [string]::IsNullOrWhiteSpace($ExistingLAPSBackupDate) -or $ExistingLAPSBackupDate -ne $LAPSBackupDate
+                                    $LAPSAccount = $ExistingLAPSAccount
+                                    $RetrieveLAPSPassword = $IsNewHuduDevice -or -not $ExistingLAPSCredentialPresent -or [string]::IsNullOrWhiteSpace($ExistingLAPSBackupDate) -or $ExistingLAPSBackupDate -ne $LAPSBackupDate
 
                                     if ($RetrieveLAPSPassword) {
                                         $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter
