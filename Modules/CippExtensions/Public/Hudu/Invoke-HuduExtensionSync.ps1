@@ -105,6 +105,15 @@ function Invoke-HuduExtensionSync {
         try {
             if (![string]::IsNullOrEmpty($DeviceLayoutId)) {
                 $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId
+                if ($Configuration.IncludeLAPS) {
+                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Account' -FieldType 'Text'
+                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Password' -FieldType 'Password'
+                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'LAPS Backup Date' -FieldType 'Text'
+                }
+                if ($Configuration.IncludeBitLocker) {
+                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'BitLocker Key IDs' -FieldType 'Text'
+                    $null = Add-HuduAssetLayoutField -AssetLayoutId $DeviceLayoutId -Label 'BitLocker Recovery Keys' -FieldType 'Password'
+                }
                 $CreateDevices = $Configuration.CreateMissingDevices
                 $DesktopsLayout = Get-HuduAssetLayouts -Id $DeviceLayoutId
                 if ($DesktopsLayout.id) {
@@ -1024,7 +1033,57 @@ function Invoke-HuduExtensionSync {
                     $DeviceAssetFields = @{
                         microsoft_365 = $DeviceIntuneDetailshtml
                     }
-                    $NewHash = Get-StringHash -String $DeviceIntuneDetailshtml
+                    $DeviceHashMaterial = $DeviceIntuneDetailshtml
+
+                    if ($Device.operatingSystem -eq 'Windows' -and -not [string]::IsNullOrWhiteSpace([string]$Device.azureADDeviceId)) {
+                        if ($Configuration.IncludeLAPS) {
+                            try {
+                                $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter
+                                if ($LAPSResult -isnot [string] -and $LAPSResult.state -eq 'success') {
+                                    $DeviceAssetFields.laps_account = [string]$LAPSResult.accountName
+                                    $DeviceAssetFields.laps_password = [string]$LAPSResult.copyField
+                                    $DeviceAssetFields.laps_backup_date = [string]$LAPSResult.backupDateTime
+                                    $DeviceHashMaterial += "`nLAPS Account:$($LAPSResult.accountName)`nLAPS Backup Date:$($LAPSResult.backupDateTime)"
+                                } elseif ([string]$LAPSResult -like 'No LAPS password found*') {
+                                    $DeviceAssetFields.laps_account = ''
+                                    $DeviceAssetFields.laps_password = ''
+                                    $DeviceAssetFields.laps_backup_date = ''
+                                    $DeviceHashMaterial += "`nLAPS Account:`nLAPS Backup Date:"
+                                } else {
+                                    Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $LAPSResult"
+                                }
+                            } catch {
+                                Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $_"
+                            }
+                        }
+
+                        if ($Configuration.IncludeBitLocker) {
+                            try {
+                                $BitLockerResult = @(Get-CIPPBitLockerKey -Device $Device.azureADDeviceId -TenantFilter $TenantFilter)
+                                $BitLockerKeys = @(
+                                    $BitLockerResult |
+                                        Where-Object { $_ -isnot [string] -and $_.state -eq 'success' } |
+                                        Sort-Object keyId
+                                )
+                                if ($BitLockerKeys.Count -gt 0) {
+                                    $BitLockerKeyIds = @($BitLockerKeys | ForEach-Object { [string]$_.keyId })
+                                    $DeviceAssetFields.bitlocker_key_ids = $BitLockerKeyIds -join "`n"
+                                    $DeviceAssetFields.bitlocker_recovery_keys = ($BitLockerKeys | ForEach-Object { "$($_.keyId): $($_.copyField)" }) -join "`n"
+                                    $DeviceHashMaterial += "`nBitLocker Key IDs:$($BitLockerKeyIds -join ',')"
+                                } elseif ($BitLockerResult.Count -eq 1 -and $BitLockerResult[0] -is [string] -and [string]$BitLockerResult[0] -like 'No BitLocker recovery keys found*') {
+                                    $DeviceAssetFields.bitlocker_key_ids = ''
+                                    $DeviceAssetFields.bitlocker_recovery_keys = ''
+                                    $DeviceHashMaterial += "`nBitLocker Key IDs:"
+                                } else {
+                                    Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName)."
+                                }
+                            } catch {
+                                Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName): $_"
+                            }
+                        }
+                    }
+
+                    $NewHash = Get-StringHash -String $DeviceHashMaterial
 
                     if (![string]::IsNullOrEmpty($DeviceLayoutId)) {
                         if ($HuduDevice) {
