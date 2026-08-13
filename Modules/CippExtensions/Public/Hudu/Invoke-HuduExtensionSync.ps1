@@ -1034,12 +1034,13 @@ function Invoke-HuduExtensionSync {
                         microsoft_365 = $DeviceIntuneDetailshtml
                     }
                     $DeviceHashMaterial = $DeviceIntuneDetailshtml
+                    $CredentialRetrievalFailed = $false
 
                     if ($Device.operatingSystem -eq 'Windows' -and -not [string]::IsNullOrWhiteSpace([string]$Device.azureADDeviceId)) {
                         if ($Configuration.IncludeLAPS) {
                             try {
                                 $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter
-                                if ($LAPSResult -isnot [string] -and $LAPSResult.state -eq 'success') {
+                                if ($LAPSResult -isnot [string] -and $LAPSResult.state -eq 'success' -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.accountName) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.copyField) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.backupDateTime)) {
                                     $DeviceAssetFields.laps_account = [string]$LAPSResult.accountName
                                     $DeviceAssetFields.laps_password = [string]$LAPSResult.copyField
                                     $DeviceAssetFields.laps_backup_date = [string]$LAPSResult.backupDateTime
@@ -1051,9 +1052,11 @@ function Invoke-HuduExtensionSync {
                                     $DeviceHashMaterial += "`nLAPS Account:`nLAPS Backup Date:"
                                 } else {
                                     Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $LAPSResult"
+                                    $CredentialRetrievalFailed = $true
                                 }
                             } catch {
                                 Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $_"
+                                $CredentialRetrievalFailed = $true
                             }
                         }
 
@@ -1062,10 +1065,10 @@ function Invoke-HuduExtensionSync {
                                 $BitLockerResult = @(Get-CIPPBitLockerKey -Device $Device.azureADDeviceId -TenantFilter $TenantFilter)
                                 $BitLockerKeys = @(
                                     $BitLockerResult |
-                                        Where-Object { $_ -isnot [string] -and $_.state -eq 'success' } |
+                                        Where-Object { $_ -isnot [string] -and $_.state -eq 'success' -and -not [string]::IsNullOrWhiteSpace([string]$_.keyId) -and -not [string]::IsNullOrWhiteSpace([string]$_.copyField) } |
                                         Sort-Object keyId
                                 )
-                                if ($BitLockerKeys.Count -gt 0) {
+                                if ($BitLockerKeys.Count -gt 0 -and $BitLockerKeys.Count -eq $BitLockerResult.Count) {
                                     $BitLockerKeyIds = @($BitLockerKeys | ForEach-Object { [string]$_.keyId })
                                     $DeviceAssetFields.bitlocker_key_ids = $BitLockerKeyIds -join "`n"
                                     $DeviceAssetFields.bitlocker_recovery_keys = ($BitLockerKeys | ForEach-Object { "$($_.keyId): $($_.copyField)" }) -join "`n"
@@ -1076,14 +1079,21 @@ function Invoke-HuduExtensionSync {
                                     $DeviceHashMaterial += "`nBitLocker Key IDs:"
                                 } else {
                                     Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName)."
+                                    $CredentialRetrievalFailed = $true
                                 }
                             } catch {
                                 Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName): $_"
+                                $CredentialRetrievalFailed = $true
                             }
                         }
                     }
 
                     $NewHash = Get-StringHash -String $DeviceHashMaterial
+
+                    if ($CredentialRetrievalFailed) {
+                        Write-Warning "Skipping Hudu asset and cache update for $($Device.deviceName) because credential retrieval failed."
+                        continue
+                    }
 
                     if (![string]::IsNullOrEmpty($DeviceLayoutId)) {
                         if ($HuduDevice) {
