@@ -1084,14 +1084,7 @@ function Invoke-HuduExtensionSync {
                     #$DeviceAppsBlock = Get-HuduFormattedBlock -Heading 'App Details' -Body ($DeviceAppsFormatted -join '')
                     $DeviceGroupsBlock = Get-HuduFormattedBlock -Heading 'Device Groups' -Body ($DeviceGroupsFormatted -join '')
 
-                    if ([string]::IsNullOrWhiteSpace([string]$device.serialNumber) -or "$($device.serialNumber)" -in $ExcludeSerials) {
-                        $HuduDevice = $HuduDevices | Where-Object { $_.name -eq $device.deviceName -or ($_.cards.integrator_name -eq 'cw_manage' -and $_.cards.data.name -contains $device.deviceName) }
-                    } else {
-                        $HuduDevice = $HuduDevices | Where-Object { $_.primary_serial -eq $device.serialNumber -or ($_.cards.integrator_name -eq 'cw_manage' -and $_.cards.data.serialNumber -eq $device.serialNumber) }
-                        if (!$HuduDevice) {
-                            $HuduDevice = $HuduDevices | Where-Object { $_.name -eq $device.deviceName -or ($_.cards.integrator_name -eq 'cw_manage' -and $_.cards.data.name -contains $device.deviceName) }
-                        }
-                    }
+                    $HuduDevice = Find-HuduDeviceMatch -Device $device -HuduDevices $HuduDevices -ExcludeSerials $ExcludeSerials
 
                     [System.Collections.Generic.List[PSCustomObject]]$DeviceLinksFormatted = @()
                     $DeviceLinksFormatted.add((Get-HuduLinkBlock -URL "https://intune.microsoft.com/$($Tenant.defaultDomainName)/#blade/Microsoft_Intune_Devices/DeviceSettingsBlade/overview/mdmDeviceId/$($Device.id)" -Icon 'fas fa-laptop' -Title 'Endpoint Manager'))
