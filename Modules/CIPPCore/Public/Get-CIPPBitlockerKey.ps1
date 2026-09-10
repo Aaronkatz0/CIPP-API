@@ -22,6 +22,7 @@
     Array of PSCustomObject with properties:
     - resultText: Formatted string containing the key ID and key value
     - copyField: The raw key value
+    - keyId: The BitLocker recovery key ID
     - state: Status of the operation ('success')
 
     Or a string message if no keys are found.
@@ -43,6 +44,7 @@ function Get-CIPPBitLockerKey {
                 [PSCustomObject]@{
                     resultText = "Id: $($_.id) Key: $($BitLockerKeyObject.key)"
                     copyField  = $BitLockerKeyObject.key
+                    keyId      = $_.id
                     state      = 'success'
                 }
             }

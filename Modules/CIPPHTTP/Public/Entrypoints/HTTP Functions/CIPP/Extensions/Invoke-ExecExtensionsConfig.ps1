@@ -28,10 +28,15 @@ function Invoke-ExecExtensionsConfig {
             }
         }
 
+        $ScheduleParameters = @{}
         if ($Body.Hudu.NextSync) {
             #parse unixtime for addedtext
             $Timestamp = [datetime]::UnixEpoch.AddSeconds([int]$Body.Hudu.NextSync).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            Register-CIPPExtensionScheduledTasks -Reschedule -NextSync $Body.Hudu.NextSync -Extensions 'Hudu'
+            $ScheduleParameters = @{
+                Reschedule = $true
+                NextSync   = $Body.Hudu.NextSync
+                Extensions = 'Hudu'
+            }
             $AddedText = " Next sync will be at $Timestamp."
             $Body.Hudu.NextSync = ''
         }
@@ -74,6 +79,9 @@ function Invoke-ExecExtensionsConfig {
         $ConfigTable = Get-CIPPTable -tablename 'Config'
         Add-AzDataTableEntity @ConfigTable -Entity $AddObject -Force
 
+        if ($ScheduleParameters.Count -gt 0) {
+            Register-CIPPExtensionScheduledTasks @ScheduleParameters
+        }
         Register-CIPPExtensionScheduledTasks
         $Result = "Successfully saved the extension configuration. $AddedText"
         Write-LogMessage -headers $Headers -API $APIName -tenant 'Global' -message $Result.Trim() -Sev 'Info'
