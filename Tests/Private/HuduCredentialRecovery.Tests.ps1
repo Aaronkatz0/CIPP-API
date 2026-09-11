@@ -41,9 +41,29 @@ Describe 'Hudu missing credential recovery' {
     It 'saves a recovered LAPS password when metadata and cached hash match' {
         $Configuration.IncludeLAPS = $true
         . $CredentialBlock
+        $DeviceAssetFields.laps_account | Should -Be '.\Administrator'
         $DeviceAssetFields.laps_password | Should -Be 'test-password'
+        $DeviceHashMaterial | Should -Match 'LAPS Account:Administrator'
+        $DeviceHashMaterial | Should -Not -Match 'LAPS Account:\.\\Administrator'
         (& $UpdateCondition) | Should -BeTrue
         Should -Invoke Get-CIPPLapsPassword -Times 1 -Exactly
+    }
+
+    It 'does not duplicate an existing local-account prefix returned by Graph' {
+        $Configuration.IncludeLAPS = $true
+        Mock Get-CIPPLapsPassword { @{ state = 'success'; accountName = '.\Administrator'; copyField = 'test-password'; backupDateTime = '2026-09-07T00:00:00Z' } }
+        . $CredentialBlock
+        $DeviceAssetFields.laps_account | Should -Be '.\Administrator'
+        $DeviceHashMaterial | Should -Match 'LAPS Account:Administrator'
+    }
+
+    It 'migrates an existing bare account without retrieving its password' {
+        $Configuration.IncludeLAPS = $true
+        $HuduDevice.fields += @{ label = 'LAPS Password'; value = 'present' }
+        . $CredentialBlock
+        $DeviceAssetFields.laps_account | Should -Be '.\Administrator'
+        (& $UpdateCondition) | Should -BeTrue
+        Should -Invoke Get-CIPPLapsPassword -Times 0 -Exactly
     }
 
     It 'retrieves and saves missing BitLocker keys when key IDs and hash match' {
@@ -57,6 +77,7 @@ Describe 'Hudu missing credential recovery' {
     It 'does not retrieve unchanged credentials that are already present' {
         $Configuration.IncludeLAPS = $true
         $Configuration.IncludeBitLocker = $true
+        $HuduDevice.fields[0].value = '.\Administrator'
         $HuduDevice.fields += @{ label = 'LAPS Password'; value = 'present' }
         $HuduDevice.fields += @{ label = 'BitLocker OS Drive 1 Recovery Key'; value = 'present' }
         . $CredentialBlock

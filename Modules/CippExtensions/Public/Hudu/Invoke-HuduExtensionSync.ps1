@@ -1145,15 +1145,20 @@ function Invoke-HuduExtensionSync {
                                     $DeviceHashMaterial += "`nLAPS Account:`nLAPS Backup Date:"
                                 } else {
                                     $LAPSBackupDate = [string]$LAPSMetadata.lastBackupDateTime
-                                    $LAPSAccount = $ExistingLAPSAccount
+                                    $LAPSAccount = ([string]$ExistingLAPSAccount) -replace '^\.\\', ''
+                                    $FormattedLAPSAccount = if ([string]::IsNullOrWhiteSpace($LAPSAccount)) { '' } else { ".\$LAPSAccount" }
+                                    if ($ExistingLAPSAccount -ne $FormattedLAPSAccount) {
+                                        $DeviceAssetFields.laps_account = $FormattedLAPSAccount
+                                        $CredentialFieldsChanged = $true
+                                    }
                                     $RetrieveLAPSPassword = $IsNewHuduDevice -or -not $ExistingLAPSCredentialPresent -or [string]::IsNullOrWhiteSpace($ExistingLAPSBackupDate) -or $ExistingLAPSBackupDate -ne $LAPSBackupDate
 
                                     if ($RetrieveLAPSPassword) {
                                         $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter -ErrorAction Stop
                                         if ($LAPSResult -isnot [string] -and $LAPSResult.state -eq 'success' -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.accountName) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.copyField) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.backupDateTime)) {
-                                            $LAPSAccount = [string]$LAPSResult.accountName
+                                            $LAPSAccount = ([string]$LAPSResult.accountName) -replace '^\.\\', ''
                                             $LAPSBackupDate = [string]$LAPSResult.backupDateTime
-                                            $DeviceAssetFields.laps_account = $LAPSAccount
+                                            $DeviceAssetFields.laps_account = ".\$LAPSAccount"
                                             $DeviceAssetFields.laps_password = [string]$LAPSResult.copyField
                                             $CredentialFieldsChanged = $true
                                             $DeviceAssetFields.laps_backup_date = $LAPSBackupDate

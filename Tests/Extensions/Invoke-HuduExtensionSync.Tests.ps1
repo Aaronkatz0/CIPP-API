@@ -157,7 +157,7 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
 
         $First.Devices | Should -Be 1
         $Second.Devices | Should -Be 1
-        $script:HuduDevice.fields.Where({ $_.slug -eq 'laps_account' }).value | Should -Be 'Administrator'
+        $script:HuduDevice.fields.Where({ $_.slug -eq 'laps_account' }).value | Should -Be '.\Administrator'
         $script:HuduDevice.fields.Where({ $_.slug -eq 'laps_password' }).value | Should -Be 'laps-secret'
         $script:HuduDevice.fields.Where({ $_.slug -eq 'bitlocker_os_drive_1_key_id' }).value | Should -Be 'key-1'
         $script:HuduDevice.fields.Where({ $_.slug -eq 'bitlocker_os_drive_1_recovery_key' }).value | Should -Be 'bitlocker-secret'
