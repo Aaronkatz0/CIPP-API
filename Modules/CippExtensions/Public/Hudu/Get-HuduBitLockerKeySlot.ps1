@@ -1,9 +1,13 @@
-function Get-HuduBitLockerKeySlots {
+function Get-HuduBitLockerKeySlot {
     [CmdletBinding()]
-    param($KeyMetadata)
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$KeyMetadata
+    )
 
     $Counters = @{}
-    foreach ($Key in @($KeyMetadata | Sort-Object id -Unique)) {
+    $Slots = foreach ($Key in @($KeyMetadata | Sort-Object id -Unique)) {
         $Group = switch ([string]$Key.volumeType) {
             { $_ -in '1', 'operatingSystemVolume' } { 'OS Drive'; break }
             { $_ -in '2', 'fixedDataVolume' } { 'Fixed Data Drive'; break }
@@ -13,12 +17,14 @@ function Get-HuduBitLockerKeySlots {
         $Counters[$Group] = 1 + [int]$Counters[$Group]
         $Label = "BitLocker $Group $($Counters[$Group])"
         $Prefix = $Label.Replace(' ', '_').ToLowerInvariant()
-        [pscustomobject]@{
-            KeyId = [string]$Key.id
-            IdLabel = "$Label Key ID"
+        [PSCustomObject]@{
+            KeyId         = [string]$Key.id
+            IdLabel       = "$Label Key ID"
             PasswordLabel = "$Label Recovery Key"
-            IdField = "${Prefix}_key_id"
+            IdField       = "${Prefix}_key_id"
             PasswordField = "${Prefix}_recovery_key"
         }
     }
+
+    return $Slots
 }

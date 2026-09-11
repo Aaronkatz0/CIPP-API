@@ -31,16 +31,23 @@
 function Get-CIPPBitLockerKey {
     [CmdletBinding()]
     param (
-        $Device,
-        $TenantFilter,
-        $APIName = 'Get BitLocker key',
-        $Headers
+        [Parameter(Mandatory = $true)]
+        [string]$Device,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TenantFilter,
+
+        [Parameter(Mandatory = $false)]
+        [string]$APIName = 'Get BitLocker key',
+
+        [Parameter(Mandatory = $false)]
+        [object]$Headers
     )
 
     try {
-        $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys?`$filter=deviceId eq '$($Device)'" -tenantid $TenantFilter |
+        $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys?`$filter=deviceId eq '$Device'" -tenantid $TenantFilter -ErrorAction Stop |
             ForEach-Object {
-                $BitLockerKeyObject = (New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys/$($_.id)?`$select=key" -tenantid $TenantFilter)
+                $BitLockerKeyObject = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys/$($_.id)?`$select=key" -tenantid $TenantFilter -ErrorAction Stop
                 [PSCustomObject]@{
                     resultText = "Id: $($_.id) Key: $($BitLockerKeyObject.key)"
                     copyField  = $BitLockerKeyObject.key

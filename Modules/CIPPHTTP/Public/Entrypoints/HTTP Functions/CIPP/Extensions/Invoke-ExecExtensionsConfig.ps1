@@ -6,7 +6,13 @@ function Invoke-ExecExtensionsConfig {
         CIPP.Extension.ReadWrite
     #>
     [CmdletBinding()]
-    param($Request, $TriggerMetadata)
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Request,
+
+        [Parameter(Mandatory = $false)]
+        [object]$TriggerMetadata
+    )
     $APIName = $Request.Params.CIPPEndpoint
     $Headers = $Request.Headers
 
@@ -31,7 +37,7 @@ function Invoke-ExecExtensionsConfig {
         $ScheduleParameters = @{}
         if ($Body.Hudu.NextSync) {
             #parse unixtime for addedtext
-            $Timestamp = [datetime]::UnixEpoch.AddSeconds([int]$Body.Hudu.NextSync).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            $Timestamp = [datetime]::UnixEpoch.AddSeconds([int]$Body.Hudu.NextSync).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
             $ScheduleParameters = @{
                 Reschedule = $true
                 NextSync   = $Body.Hudu.NextSync
@@ -43,7 +49,7 @@ function Invoke-ExecExtensionsConfig {
 
         $Table = Get-CIPPTable -TableName Extensionsconfig
         foreach ($APIKey in $Body.PSObject.Properties.Name) {
-            Write-Information "Working on $apikey"
+            Write-Information "Working on $APIKey"
             if ($Body.$APIKey.APIKey -eq 'SentToKeyVault' -or $Body.$APIKey.APIKey -eq '') {
                 Write-Information 'Not sending to keyvault. Key previously set or left blank.'
             } else {
@@ -77,7 +83,7 @@ function Invoke-ExecExtensionsConfig {
         }
         Write-Information ($AddObject | ConvertTo-Json -Compress)
         $ConfigTable = Get-CIPPTable -tablename 'Config'
-        Add-AzDataTableEntity @ConfigTable -Entity $AddObject -Force
+        Add-AzDataTableEntity @ConfigTable -Entity $AddObject -Force | Out-Null
 
         if ($ScheduleParameters.Count -gt 0) {
             Register-CIPPExtensionScheduledTasks @ScheduleParameters

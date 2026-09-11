@@ -3,14 +3,14 @@ BeforeAll {
 
     function New-TestHuduDevice {
         param($Id, $Name, $Serial, $ManageName, $ManageSerial)
-        [pscustomobject]@{
+        [PSCustomObject]@{
             id             = $Id
             name           = $Name
             primary_serial = $Serial
             cards          = @(
-                [pscustomobject]@{
+                [PSCustomObject]@{
                     integrator_name = 'cw_manage'
-                    data            = [pscustomobject]@{
+                    data            = [PSCustomObject]@{
                         name         = $ManageName
                         serialNumber = $ManageSerial
                     }

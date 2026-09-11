@@ -7,13 +7,16 @@ function Find-HuduDeviceMatch {
         Uses a usable serial number first and falls back to the device name. Blank
         and excluded serial numbers never participate in serial matching.
     #>
+    [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        $Device,
+        [Parameter(Mandatory = $true)]
+        [object]$Device,
 
+        [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
-        [object[]]$HuduDevices = @(),
+        [object[]]$HuduDevices,
 
+        [Parameter(Mandatory = $false)]
         [AllowEmptyCollection()]
         [string[]]$ExcludeSerials = @()
     )

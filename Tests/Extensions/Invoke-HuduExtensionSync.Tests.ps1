@@ -1,7 +1,7 @@
 BeforeAll {
     . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Find-HuduDeviceMatch.ps1"
-    . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Get-HuduBitLockerKeySlots.ps1"
-    . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Get-HuduBitLockerSyncFields.ps1"
+    . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Get-HuduBitLockerKeySlot.ps1"
+    . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Get-HuduBitLockerSyncField.ps1"
     . "$PSScriptRoot/../../Modules/CippExtensions/Public/Hudu/Invoke-HuduExtensionSync.ps1"
 
     function Connect-HuduAPI { param($Configuration) }
@@ -22,7 +22,7 @@ BeforeAll {
     function New-GraphGetRequest { param($Uri, $TenantId, [switch]$NoAuthCheck) }
     function Get-CIPPDbItem { param($TenantFilter, $Type) }
     function Get-CIPPLapsPassword { param($Device, $TenantFilter) }
-    function Get-CIPPBitLockerKey { param($GUID, $TenantFilter) }
+    function Get-CIPPBitLockerKey { param($Device, $TenantFilter) }
     function Get-HuduFormattedField { param($Title, $Value) }
     function Get-HuduFormattedBlock { param($Heading, $Body) }
     function Get-StringHash { param($String) }
@@ -33,37 +33,39 @@ BeforeAll {
     function Get-HuduWebsites { param($Name) }
     function New-HuduWebsite { param($Name, $Notes, $Paused, $CompanyId, $DisableDNS, $DisableSSL, $DisableWhois) }
     function Write-LogMessage { param($Tenant, $TenantId, $API, $Message, $Level) }
+    function Get-CippException { param($Exception) return [PSCustomObject]@{ NormalizedError = $Exception.Exception.Message } }
 }
 
 Describe 'Invoke-HuduExtensionSync credential integration' {
     BeforeEach {
         $env:CIPPRootPath = (Resolve-Path "$PSScriptRoot/../..").Path
         $script:CachedHash = $null
-        $script:HuduDevice = [pscustomobject]@{
+        $script:HuduDevice = [PSCustomObject]@{
             id              = 101
             name            = 'DEVICE-01'
             primary_serial  = 'SERIAL-01'
             asset_layout_id = 10
             cards           = @()
             fields          = @(
-                [pscustomobject]@{ label = 'Microsoft 365'; slug = 'microsoft_365'; value = 'old' }
+                [PSCustomObject]@{ label = 'Microsoft 365'; slug = 'microsoft_365'; value = 'old' }
             )
         }
-        $script:Layout = [pscustomobject]@{
+        $script:Layout = [PSCustomObject]@{
             id = 10
             fields = @(
-                [pscustomobject]@{ label = 'LAPS Account'; position = 0; field_type = 'Email' }
-                [pscustomobject]@{ label = 'LAPS Password'; position = 1; field_type = 'Password' }
-                [pscustomobject]@{ label = 'LAPS Backup Date'; position = 2; field_type = 'Text' }
-                [pscustomobject]@{ label = 'Microsoft 365'; position = 3; field_type = 'RichText' }
-                [pscustomobject]@{ label = 'BitLocker OS Drive 1 Key ID'; position = 4; field_type = 'Text' }
-                [pscustomobject]@{ label = 'BitLocker OS Drive 1 Recovery Key'; position = 5; field_type = 'Password' }
+                [PSCustomObject]@{ label = 'LAPS Account'; position = 0; field_type = 'Email' }
+                [PSCustomObject]@{ label = 'LAPS Password'; position = 1; field_type = 'Password' }
+                [PSCustomObject]@{ label = 'LAPS Backup Date'; position = 2; field_type = 'Text' }
+                [PSCustomObject]@{ label = 'Microsoft 365'; position = 3; field_type = 'RichText' }
+                [PSCustomObject]@{ label = 'BitLocker OS Drive 1 Key ID'; position = 4; field_type = 'Text' }
+                [PSCustomObject]@{ label = 'BitLocker OS Drive 1 Recovery Key'; position = 5; field_type = 'Password' }
             )
         }
-        $Configuration = [pscustomobject]@{
-            Hudu = [pscustomobject]@{
+        $Configuration = [PSCustomObject]@{
+            Hudu = [PSCustomObject]@{
                 IncludeLAPS = $true; IncludeBitLocker = $true
                 CreateMissingUsers = $false; CreateMissingDevices = $false
+                ExcludeSerials = 'CUSTOM-PLACEHOLDER'
                 ImportDomains = $false; MonitorDomains = $false; HideEmptyRoles = $false
                 IncludeDefenderLink = $false; IncludeComplianceLink = $false; IncludeParterCenterLink = $false
             }
@@ -71,30 +73,30 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
 
         Mock Connect-HuduAPI { }
         Mock Get-Tenants {
-            [pscustomobject]@{ displayName = 'Contoso'; defaultDomainName = 'contoso.onmicrosoft.com'; initialDomainName = 'contoso.onmicrosoft.com'; customerId = 'tenant-1' }
+            [PSCustomObject]@{ displayName = 'Contoso'; defaultDomainName = 'contoso.onmicrosoft.com'; initialDomainName = 'contoso.onmicrosoft.com'; customerId = 'tenant-1' }
         }
-        Mock Get-AssignedNameMap { [pscustomobject]@{} }
-        Mock Get-AssignedMap { [pscustomobject]@{} }
+        Mock Get-AssignedNameMap { [PSCustomObject]@{} }
+        Mock Get-AssignedMap { [PSCustomObject]@{} }
         Mock Get-CIPPTable { @{} }
         Mock Get-CIPPAzDataTableEntity {
             if ($Filter -like "*PartitionKey eq 'HuduMapping'*") {
                 return @(
-                    [pscustomobject]@{ PartitionKey = 'HuduMapping'; RowKey = 'tenant-1'; IntegrationId = 20; IntegrationName = 'Contoso' }
-                    [pscustomobject]@{ PartitionKey = 'HuduMapping'; RowKey = 'Devices'; IntegrationId = 10; IntegrationName = 'Computers' }
+                    [PSCustomObject]@{ PartitionKey = 'HuduMapping'; RowKey = 'tenant-1'; IntegrationId = 20; IntegrationName = 'Contoso' }
+                    [PSCustomObject]@{ PartitionKey = 'HuduMapping'; RowKey = 'Devices'; IntegrationId = 10; IntegrationName = 'Computers' }
                 )
             }
-            if ($Filter -like "*InstanceProperties*") { return [pscustomobject]@{ Value = 'cipp.example.test' } }
-            if ($Filter -like "*CacheMetadata*") { return [pscustomobject]@{ LastRefresh = (Get-Date).ToUniversalTime().ToString('o') } }
+            if ($Filter -like "*InstanceProperties*") { return [PSCustomObject]@{ Value = 'cipp.example.test' } }
+            if ($Filter -like "*CacheMetadata*") { return [PSCustomObject]@{ LastRefresh = (Get-Date).ToUniversalTime().ToString('o') } }
             if ($Filter -like "*PartitionKey eq 'HuduRelation'*") { return @() }
             if ($Filter -like "*PartitionKey eq 'HuduDevice'*") {
-                if ($script:CachedHash) { return [pscustomobject]@{ Hash = $script:CachedHash } }
+                if ($script:CachedHash) { return [PSCustomObject]@{ Hash = $script:CachedHash } }
                 return $null
             }
         }
         Mock Get-CippExtensionReportingData {
-            [pscustomobject]@{
+            [PSCustomObject]@{
                 Users = @(); AllRoles = @(); Domains = @(); Licenses = @()
-                Devices = @([pscustomobject]@{
+                Devices = @([PSCustomObject]@{
                     id = 'managed-1'; azureADDeviceId = 'device-1'; deviceName = 'DEVICE-01'; serialNumber = 'SERIAL-01'
                     operatingSystem = 'Windows'; deviceType = 'windowsRT'; complianceState = 'compliant'
                     totalStorageSpaceInBytes = 1073741824; freeStorageSpaceInBytes = 536870912
@@ -104,25 +106,29 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
                 OneDriveUsage = @(); CASMailbox = @(); Mailboxes = @(); MailboxUsage = @(); MailboxPermissions = @()
             }
         }
-        Mock Get-HuduCompanies { [pscustomobject]@{ id = 20; name = 'Contoso'; archived = $false } }
+        Mock Get-HuduCompanies { [PSCustomObject]@{ id = 20; name = 'Contoso'; archived = $false } }
         Mock Add-HuduAssetLayoutField { }
         Mock Get-HuduAssetLayouts { $script:Layout }
         Mock Get-HuduAssets { @($script:HuduDevice) }
+        Mock Find-HuduDeviceMatch {
+            $script:ObservedExcludeSerials = @($ExcludeSerials)
+            return @($script:HuduDevice)
+        }
         Mock Get-HuduRelations { @() }
-        Mock Get-HuduLinkBlock { [pscustomobject]@{ html = $Title } }
-        Mock New-GraphGetRequest { [pscustomobject]@{ id = 'device-1'; deviceName = 'DEVICE-01'; lastBackupDateTime = '2026-09-10T12:00:00Z' } }
+        Mock Get-HuduLinkBlock { [PSCustomObject]@{ html = $Title } }
+        Mock New-GraphGetRequest { [PSCustomObject]@{ id = 'device-1'; deviceName = 'DEVICE-01'; lastBackupDateTime = '2026-09-10T12:00:00Z' } }
         Mock Get-CIPPDbItem {
             if ($Type -eq 'BitlockerKeys') {
                 return @(
-                    [pscustomobject]@{ RowKey = 'BitlockerKeys-Count'; DataCount = 1 }
-                    [pscustomobject]@{ RowKey = 'key-1'; Data = [pscustomobject]@{ id = 'key-1'; deviceId = 'device-1'; volumeType = 1 } }
+                    [PSCustomObject]@{ RowKey = 'BitlockerKeys-Count'; DataCount = 1 }
+                    [PSCustomObject]@{ RowKey = 'key-1'; Data = [PSCustomObject]@{ id = 'key-1'; deviceId = 'device-1'; volumeType = 1 } }
                 )
             }
             return @()
         }
-        Mock Get-CIPPLapsPassword { [pscustomobject]@{ state = 'success'; accountName = 'Administrator'; copyField = 'laps-secret'; backupDateTime = '2026-09-10T12:00:00Z' } }
-        Mock Get-CIPPBitLockerKey { [pscustomobject]@{ state = 'success'; keyId = 'key-1'; copyField = 'bitlocker-secret' } }
-        Mock Get-HuduFormattedField { [pscustomobject]@{ title = $Title; value = $Value } }
+        Mock Get-CIPPLapsPassword { [PSCustomObject]@{ state = 'success'; accountName = 'Administrator'; copyField = 'laps-secret'; backupDateTime = '2026-09-10T12:00:00Z' } }
+        Mock Get-CIPPBitLockerKey { [PSCustomObject]@{ state = 'success'; keyId = 'key-1'; copyField = 'bitlocker-secret' } }
+        Mock Get-HuduFormattedField { [PSCustomObject]@{ title = $Title; value = $Value } }
         Mock Get-HuduFormattedBlock { "<$Heading>$Body</$Heading>" }
         Mock Get-StringHash { 'device-hash' }
         Mock Add-CIPPAzDataTableEntity {
@@ -138,7 +144,7 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
             foreach ($Key in $Fields.Keys) {
                 $Existing = $script:HuduDevice.fields | Where-Object slug -eq $Key | Select-Object -First 1
                 if ($Existing) { $Existing.value = $Fields[$Key] }
-                else { $script:HuduDevice.fields += [pscustomobject]@{ label = $Labels[$Key]; slug = $Key; value = $Fields[$Key] } }
+                else { $script:HuduDevice.fields += [PSCustomObject]@{ label = $Labels[$Key]; slug = $Key; value = $Fields[$Key] } }
             }
         }
         Mock Set-HuduMagicDash { }
@@ -159,5 +165,8 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
         Should -Invoke Get-CIPPBitLockerKey -Times 1 -Exactly
         Should -Invoke Set-HuduAsset -Times 1 -Exactly
         Should -Invoke Add-HuduAssetLayoutField -Times 0 -Exactly
+        Should -Invoke Find-HuduDeviceMatch -Times 2 -Exactly -ParameterFilter {
+            'SystemSerialNumber' -in $ExcludeSerials -and 'CUSTOM-PLACEHOLDER' -in $ExcludeSerials
+        }
     }
 }

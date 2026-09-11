@@ -1,13 +1,22 @@
-function Get-HuduBitLockerSyncFields {
+function Get-HuduBitLockerSyncField {
     [CmdletBinding()]
     param(
-        $KeyMetadata,
-        $ExistingFields,
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$KeyMetadata,
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [object[]]$ExistingFields = @(),
+
+        [Parameter(Mandatory = $true)]
         [string]$DeviceId,
+
+        [Parameter(Mandatory = $true)]
         [string]$TenantFilter
     )
 
-    $Slots = @(Get-HuduBitLockerKeySlots -KeyMetadata $KeyMetadata)
+    $Slots = @(Get-HuduBitLockerKeySlot -KeyMetadata $KeyMetadata)
     $KeyIds = @($Slots.KeyId | Sort-Object -Unique)
     $FieldsByName = @{}
     foreach ($Field in $ExistingFields) {
@@ -33,7 +42,7 @@ function Get-HuduBitLockerSyncFields {
     })
     $Updates = @{}
     if ($NeedsUpdate) {
-        $Keys = @(Get-CIPPBitLockerKey -Device $DeviceId -TenantFilter $TenantFilter)
+        $Keys = @(Get-CIPPBitLockerKey -Device $DeviceId -TenantFilter $TenantFilter -ErrorAction Stop)
         $ValidKeys = @($Keys | Where-Object {
             $_ -isnot [string] -and $_.state -eq 'success' -and
             -not [string]::IsNullOrWhiteSpace([string]$_.keyId) -and

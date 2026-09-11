@@ -5,13 +5,13 @@ BeforeAll {
         param($Id, $Fields)
         foreach ($field in $Fields) { $field.Remove('required') }
         $script:SentFields = $Fields
-        $script:Layout.fields = @($Fields | ForEach-Object { [pscustomobject]$_ })
+        $script:Layout.fields = @($Fields | ForEach-Object { [PSCustomObject]$_ })
     }
 }
 Describe 'Hudu layout field normalization' {
     It 'copies object and dictionary fields and inserts at the requested position' {
         $script:Layout = @{ fields = @(
-            [pscustomobject]@{ id = 1; label = 'Serial'; position = 0; required = $false; field_type = 'Text' }
+            [PSCustomObject]@{ id = 1; label = 'Serial'; position = 0; required = $false; field_type = 'Text' }
             @{ id = 2; label = 'Notes'; position = 1; required = $false; field_type = 'RichText' }
         ) }
         Add-HuduAssetLayoutField -AssetLayoutId 10 -Label 'LAPS Password' -FieldType 'Password' -Position 1
@@ -24,15 +24,28 @@ Describe 'Hudu layout field normalization' {
     }
     It 'does not update a layout when field type and position already match' {
         $script:SentFields = $null
-        $script:Layout = @{ fields = @([pscustomobject]@{ label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }) }
+        $script:Layout = @{ fields = @([PSCustomObject]@{ label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }) }
         Add-HuduAssetLayoutField -AssetLayoutId 10 -Label 'LAPS Password' -FieldType Password -Position 0
         $script:SentFields | Should -BeNullOrEmpty
     }
 
+    It 'preserves identifiers and custom properties when the target field is a dictionary' {
+        $script:Layout = @{ fields = @(
+            @{ id = 10; label = 'LAPS Account'; position = 1; field_type = 'Text'; show_in_list = $true; custom_option = 'preserve-me' }
+            @{ id = 11; label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }
+        ) }
+
+        Add-HuduAssetLayoutField -AssetLayoutId 10 -Label 'LAPS Account' -FieldType 'Email' -Position 0
+
+        $script:SentFields[0].id | Should -Be 10
+        $script:SentFields[0].custom_option | Should -Be 'preserve-me'
+        $script:SentFields[0].field_type | Should -Be 'Email'
+    }
+
     It 'moves the LAPS account above the password and makes it copyable' {
         $script:Layout = @{ fields = @(
-            [pscustomobject]@{ id = 1; label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }
-            [pscustomobject]@{ id = 2; label = 'LAPS Account'; position = 1; field_type = 'Text'; show_in_list = $false }
+            [PSCustomObject]@{ id = 1; label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }
+            [PSCustomObject]@{ id = 2; label = 'LAPS Account'; position = 1; field_type = 'Text'; show_in_list = $false }
         ) }
         Add-HuduAssetLayoutField -AssetLayoutId 10 -Label 'LAPS Account' -FieldType Email -Position 0
         $script:SentFields[0].label | Should -Be 'LAPS Account'
@@ -42,10 +55,10 @@ Describe 'Hudu layout field normalization' {
 
     It 'migrates credential fields, preserves custom layout data, and is idempotent' {
         $script:Layout = @{ fields = @(
-            [pscustomobject]@{ id = 1; label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }
-            [pscustomobject]@{ id = 2; label = 'LAPS Account'; position = 1; field_type = 'Text'; show_in_list = $false }
-            [pscustomobject]@{ id = 3; label = 'BitLocker Keys'; position = 2; field_type = 'RichText'; show_in_list = $false }
-            [pscustomobject]@{ id = 4; label = 'Site Notes'; position = 3; field_type = 'Text'; show_in_list = $true; custom_option = 'preserve-me' }
+            [PSCustomObject]@{ id = 1; label = 'LAPS Password'; position = 0; field_type = 'Password'; show_in_list = $false }
+            [PSCustomObject]@{ id = 2; label = 'LAPS Account'; position = 1; field_type = 'Text'; show_in_list = $false }
+            [PSCustomObject]@{ id = 3; label = 'BitLocker Keys'; position = 2; field_type = 'RichText'; show_in_list = $false }
+            [PSCustomObject]@{ id = 4; label = 'Site Notes'; position = 3; field_type = 'Text'; show_in_list = $true; custom_option = 'preserve-me' }
         ) }
 
         $DesiredFields = @(

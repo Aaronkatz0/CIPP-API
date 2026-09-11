@@ -3,9 +3,13 @@ function Invoke-HuduExtensionSync {
         .FUNCTIONALITY
         Internal
     #>
+    [CmdletBinding()]
     param(
-        $Configuration,
-        $TenantFilter
+        [Parameter(Mandatory = $true)]
+        [object]$Configuration,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TenantFilter
     )
     try {
         Connect-HuduAPI -configuration $Configuration | Out-Null
@@ -108,11 +112,11 @@ function Invoke-HuduExtensionSync {
                 $DeviceLayoutFieldsAdded = $false
                 $RequiredDeviceLayoutFields = [System.Collections.Generic.List[object]]::new()
                 if ($Configuration.IncludeLAPS) {
-                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Account'; FieldType = 'Email'; Position = 0 })
-                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Password'; FieldType = 'Password'; Position = 1 })
-                    $RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Backup Date'; FieldType = 'Text'; Position = 2 })
+                    [void]$RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Account'; FieldType = 'Email'; Position = 0 })
+                    [void]$RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Password'; FieldType = 'Password'; Position = 1 })
+                    [void]$RequiredDeviceLayoutFields.Add(@{ Label = 'LAPS Backup Date'; FieldType = 'Text'; Position = 2 })
                 }
-                $RequiredDeviceLayoutFields.Add(@{ Label = 'Microsoft 365'; FieldType = 'RichText'; Position = $(if ($Configuration.IncludeLAPS) { 3 } else { 0 }) })
+                [void]$RequiredDeviceLayoutFields.Add(@{ Label = 'Microsoft 365'; FieldType = 'RichText'; Position = $(if ($Configuration.IncludeLAPS) { 3 } else { 0 }) })
                 foreach ($RequiredField in $RequiredDeviceLayoutFields) {
                     $CurrentField = $DesktopsLayout.fields | Where-Object { $_.label -eq $RequiredField.Label } | Select-Object -First 1
                     if (-not $CurrentField -or [string]$CurrentField.field_type -ne $RequiredField.FieldType -or [int]$CurrentField.position -ne [int]$RequiredField.Position) {
@@ -148,12 +152,10 @@ function Invoke-HuduExtensionSync {
 
         # Defaults
         $IntuneDesktopDeviceTypes = 'windowsRT,macMDM' -split ','
-        $DefaultSerials = [System.Collections.Generic.List[string]]@('SystemSerialNumber', 'To Be Filled By O.E.M.', 'System Serial Number', '0123456789', '123456789', 'TobefilledbyO.E.M.')
+        $ExcludeSerials = [System.Collections.Generic.List[string]]@('SystemSerialNumber', 'To Be Filled By O.E.M.', 'System Serial Number', '0123456789', '123456789', 'TobefilledbyO.E.M.')
 
         if ($Configuration.ExcludeSerials) {
-            $ExcludeSerials = $DefaultSerials.AddRange($Configuration.ExcludeSerials -split ',')
-        } else {
-            $ExcludeSerials = $DefaultSerials
+            [void]$ExcludeSerials.AddRange([string[]]($Configuration.ExcludeSerials -split ','))
         }
 
         $RelationsCacheMeta = Get-CIPPAzDataTableEntity @HuduRelationsCache -Filter "PartitionKey eq 'CacheMetadata' and RowKey eq 'LastRefresh'"
@@ -366,7 +368,7 @@ function Invoke-HuduExtensionSync {
         $LAPSMetadataByDeviceId = @{}
         if ($Configuration.IncludeLAPS) {
             try {
-                $LAPSMetadata = @(New-GraphGetRequest -NoAuthCheck $true -uri 'https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime,refreshDateTime' -tenantid $TenantFilter)
+                $LAPSMetadata = @(New-GraphGetRequest -NoAuthCheck $true -uri 'https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime,refreshDateTime' -tenantid $TenantFilter -ErrorAction Stop)
                 foreach ($LAPSMetadataItem in $LAPSMetadata) {
                     if ($LAPSMetadataItem -is [string] -or [string]::IsNullOrWhiteSpace([string]$LAPSMetadataItem.id) -or [string]::IsNullOrWhiteSpace([string]$LAPSMetadataItem.lastBackupDateTime)) {
                         throw 'The LAPS metadata response contained an incomplete record.'
@@ -375,7 +377,8 @@ function Invoke-HuduExtensionSync {
                 }
             } catch {
                 $LAPSMetadataAvailable = $false
-                Write-Warning "Unable to retrieve LAPS metadata for $($Tenant.defaultDomainName): $_"
+                $ErrorMessage = Get-CippException -Exception $_
+                Write-Warning "Unable to retrieve LAPS metadata for $($Tenant.defaultDomainName): $($ErrorMessage.NormalizedError)"
             }
         }
 
@@ -383,7 +386,7 @@ function Invoke-HuduExtensionSync {
         $BitLockerKeyMetadata = @()
         if ($Configuration.IncludeBitLocker) {
             try {
-                $BitLockerCacheRows = @(Get-CIPPDbItem -TenantFilter $TenantFilter -Type 'BitlockerKeys')
+                $BitLockerCacheRows = @(Get-CIPPDbItem -TenantFilter $TenantFilter -Type 'BitlockerKeys' -ErrorAction Stop)
                 $BitLockerCountRow = $BitLockerCacheRows | Where-Object { $_.RowKey -eq 'BitlockerKeys-Count' } | Select-Object -First 1
                 if ($null -eq $BitLockerCountRow) {
                     throw 'BitLocker key metadata cache has not been populated.'
@@ -409,7 +412,7 @@ function Invoke-HuduExtensionSync {
                 if ($DeviceLayoutId) {
                     $LayoutSlots = @(
                         foreach ($DeviceKeys in ($BitLockerKeyMetadata | Group-Object deviceId)) {
-                            Get-HuduBitLockerKeySlots -KeyMetadata $DeviceKeys.Group
+                            Get-HuduBitLockerKeySlot -KeyMetadata $DeviceKeys.Group
                         }
                     ) | Sort-Object IdLabel -Unique
                     $NextPosition = 1 + [int](($DesktopsLayout.fields | Measure-Object position -Maximum).Maximum)
@@ -427,7 +430,8 @@ function Invoke-HuduExtensionSync {
                 }
             } catch {
                 $BitLockerMetadataAvailable = $false
-                Write-Warning "Unable to retrieve BitLocker key metadata for $($Tenant.defaultDomainName): $_"
+                $ErrorMessage = Get-CippException -Exception $_
+                Write-Warning "Unable to retrieve BitLocker key metadata for $($Tenant.defaultDomainName): $($ErrorMessage.NormalizedError)"
             }
         }
 
@@ -1084,7 +1088,7 @@ function Invoke-HuduExtensionSync {
                     #$DeviceAppsBlock = Get-HuduFormattedBlock -Heading 'App Details' -Body ($DeviceAppsFormatted -join '')
                     $DeviceGroupsBlock = Get-HuduFormattedBlock -Heading 'Device Groups' -Body ($DeviceGroupsFormatted -join '')
 
-                    $HuduDevice = Find-HuduDeviceMatch -Device $device -HuduDevices $HuduDevices -ExcludeSerials $ExcludeSerials
+                    $HuduDevice = Find-HuduDeviceMatch -Device $Device -HuduDevices $HuduDevices -ExcludeSerials $ExcludeSerials
 
                     [System.Collections.Generic.List[PSCustomObject]]$DeviceLinksFormatted = @()
                     $DeviceLinksFormatted.add((Get-HuduLinkBlock -URL "https://intune.microsoft.com/$($Tenant.defaultDomainName)/#blade/Microsoft_Intune_Devices/DeviceSettingsBlade/overview/mdmDeviceId/$($Device.id)" -Icon 'fas fa-laptop' -Title 'Endpoint Manager'))
@@ -1154,7 +1158,7 @@ function Invoke-HuduExtensionSync {
                                     $RetrieveLAPSPassword = $IsNewHuduDevice -or -not $ExistingLAPSCredentialPresent -or [string]::IsNullOrWhiteSpace($ExistingLAPSBackupDate) -or $ExistingLAPSBackupDate -ne $LAPSBackupDate
 
                                     if ($RetrieveLAPSPassword) {
-                                        $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter
+                                        $LAPSResult = Get-CIPPLapsPassword -Device $Device.azureADDeviceId -TenantFilter $TenantFilter -ErrorAction Stop
                                         if ($LAPSResult -isnot [string] -and $LAPSResult.state -eq 'success' -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.accountName) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.copyField) -and -not [string]::IsNullOrWhiteSpace([string]$LAPSResult.backupDateTime)) {
                                             $LAPSAccount = [string]$LAPSResult.accountName
                                             $LAPSBackupDate = [string]$LAPSResult.backupDateTime
@@ -1175,7 +1179,8 @@ function Invoke-HuduExtensionSync {
                                     $DeviceHashMaterial += "`nLAPS Account:$LAPSAccount`nLAPS Backup Date:$LAPSBackupDate"
                                 }
                             } catch {
-                                Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $_"
+                                $ErrorMessage = Get-CippException -Exception $_
+                                Write-Warning "Unable to retrieve LAPS data for $($Device.deviceName): $($ErrorMessage.NormalizedError)"
                                 $CredentialRetrievalFailed = $true
                             }
                         }
@@ -1195,7 +1200,7 @@ function Invoke-HuduExtensionSync {
                                 )
                                 $DeviceHashMaterial += "`nBitLocker Key IDs:$($BitLockerKeyIds -join ',')"
 
-                                $BitLockerFields = Get-HuduBitLockerSyncFields -KeyMetadata @($BitLockerKeyMetadata | Where-Object { $_.deviceId -eq $Device.azureADDeviceId }) -ExistingFields $SingleHuduDevice.fields -DeviceId $Device.azureADDeviceId -TenantFilter $TenantFilter
+                                $BitLockerFields = Get-HuduBitLockerSyncField -KeyMetadata @($BitLockerKeyMetadata | Where-Object { $_.deviceId -eq $Device.azureADDeviceId }) -ExistingFields $SingleHuduDevice.fields -DeviceId $Device.azureADDeviceId -TenantFilter $TenantFilter -ErrorAction Stop
                                 if ($BitLockerFields.Count -gt 0) {
                                     $CredentialFieldsChanged = $true
                                     foreach ($FieldName in $BitLockerFields.Keys) {
@@ -1203,7 +1208,8 @@ function Invoke-HuduExtensionSync {
                                     }
                                 }
                             } catch {
-                                Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName): $_"
+                                $ErrorMessage = Get-CippException -Exception $_
+                                Write-Warning "Unable to retrieve BitLocker recovery keys for $($Device.deviceName): $($ErrorMessage.NormalizedError)"
                                 $CredentialRetrievalFailed = $true
                             }
                         }
@@ -1214,7 +1220,7 @@ function Invoke-HuduExtensionSync {
                     if ($CredentialRetrievalFailed) {
                         $CredentialFailureMessage = "Device $($Device.deviceName): Skipped Hudu asset and cache update because credential retrieval failed."
                         Write-Warning $CredentialFailureMessage
-                        $CompanyResult.Errors.Add($CredentialFailureMessage)
+                        [void]$CompanyResult.Errors.Add($CredentialFailureMessage)
                         continue
                     }
 

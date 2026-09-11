@@ -26,7 +26,7 @@ Describe 'Extension configuration save ordering' {
         $request = @{
             Params = @{ CIPPEndpoint = 'ExecExtensionsConfig' }
             Headers = @{ 'x-ms-original-url' = 'http://localhost:4280/api/ExecExtensionsConfig' }
-            Body = [pscustomobject]@{ Hudu = [pscustomobject]@{ Enabled = $true; APIKey = 'SentToKeyVault'; IncludeLAPS = $true; NextSync = 1800000000 } }
+            Body = [PSCustomObject]@{ Hudu = [PSCustomObject]@{ Enabled = $true; APIKey = 'SentToKeyVault'; IncludeLAPS = $true; NextSync = 1800000000 } }
         }
     }
     It 'persists first-time Hudu settings before rescheduling and registers other extensions' {
