@@ -165,6 +165,9 @@ Describe 'Invoke-HuduExtensionSync credential integration' {
         Should -Invoke Get-CIPPBitLockerKey -Times 1 -Exactly
         Should -Invoke Set-HuduAsset -Times 1 -Exactly
         Should -Invoke Add-HuduAssetLayoutField -Times 0 -Exactly
+        Should -Invoke Add-CIPPAzDataTableEntity -Times 1 -Exactly -ParameterFilter {
+            $Entity.PartitionKey -eq 'HuduDevice'
+        }
         Should -Invoke Find-HuduDeviceMatch -Times 2 -Exactly -ParameterFilter {
             'SystemSerialNumber' -in $ExcludeSerials -and 'CUSTOM-PLACEHOLDER' -in $ExcludeSerials
         }

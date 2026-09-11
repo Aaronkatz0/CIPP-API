@@ -42,9 +42,6 @@ function Invoke-HuduExtensionSync {
         $HuduRelationsCache = Get-CippTable -tablename 'CacheHuduRelations'
         $HuduRelationsCacheTTLMinutes = 15
 
-        # Import license mapping
-        $LicTable = [System.IO.File]::ReadAllText((Join-Path $env:CIPPRootPath 'Config\ConversionTable.csv')) | ConvertFrom-Csv
-
         $CompanyResult.Logs.Add('Starting Hudu Extension Sync')
 
         # Get CIPP URL
@@ -656,12 +653,6 @@ function Invoke-HuduExtensionSync {
                                 AccessRights = $Perm.PermissionList.AccessRights -join ', '
                             }
                         }
-                    }
-
-                    try {
-                        $TotalItemSize = [math]::Round($StatsRequest.storageUsedInBytes / 1Gb, 2)
-                    } catch {
-                        $TotalItemSize = 0
                     }
 
                     $UserMailSettings = [pscustomobject]@{
